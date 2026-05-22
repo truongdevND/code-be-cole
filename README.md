@@ -859,3 +859,1149 @@ public ResponseEntity<?> getMe(Authentication authentication) {
 
 *Tài liệu này được tạo dựa trên codebase thực tế của dự án Cole LMS.*  
 *Cập nhật lần cuối: 2026-05-21*
+# Cole LMS — Tài Liệu Database
+
+> Mô tả toàn bộ schema database PostgreSQL của dự án.  
+> Mỗi bảng được trích xuất trực tiếp từ Entity class trong code.
+
+---
+
+## Mục Lục
+
+1. [Tổng quan Database](#1-tổng-quan-database)
+2. [Sơ đồ quan hệ tổng thể](#2-sơ-đồ-quan-hệ-tổng-thể)
+3. [Nhóm 1 — User & Auth](#3-nhóm-1--user--auth)
+4. [Nhóm 2 — Course (Khóa học)](#4-nhóm-2--course-khóa-học)
+5. [Nhóm 3 — Class (Lớp học)](#5-nhóm-3--class-lớp-học)
+6. [Nhóm 4 — Exam (Kiểm tra)](#6-nhóm-4--exam-kiểm-tra)
+7. [Nhóm 5 — Integration (Tích hợp)](#7-nhóm-5--integration-tích-hợp)
+8. [Nhóm 6 — Lecturer (Giảng viên)](#8-nhóm-6--lecturer-giảng-viên)
+9. [Nhóm 7 — Learning Path (Lộ trình)](#9-nhóm-7--learning-path-lộ-trình)
+10. [Nhóm 8 — Misa (Kế toán)](#10-nhóm-8--misa-kế-toán)
+11. [Nhóm 9 — System (Hệ thống)](#11-nhóm-9--system-hệ-thống)
+12. [Design Patterns trong Database](#12-design-patterns-trong-database)
+13. [Enum toàn dự án](#13-enum-toàn-dự-án)
+14. [Index & Constraint](#14-index--constraint)
+
+---
+
+## 1. Tổng quan Database
+
+| Thông tin | Chi tiết |
+|---|---|
+| Loại DB | PostgreSQL |
+| Host (Docker) | `lms-db:5432` |
+| Database name | `lms-db` |
+| ORM | Hibernate (Spring Data JPA) |
+| DDL mode | `update` — tự update schema khi app restart |
+| Naming | snake_case (camelCase trong Java → snake_case trong DB) |
+| Tổng số bảng | ~75 bảng |
+
+### Convention đặt tên bảng
+
+```
+Java Class Name      →   DB Table Name
+─────────────────────────────────────────
+User                 →   users
+CourseClass          →   classes
+ClassSession         →   class_sessions
+StudentClass         →   student_classes
+ExamSession          →   exam_session
+QuestionTagBinding   →   question_tag_binding
+```
+
+---
+
+## 2. Sơ đồ quan hệ tổng thể
+
+```
+                        ┌──────────┐
+                        │  users   │
+                        └────┬─────┘
+              ┌──────────────┼──────────────┐
+              │              │              │
+         ┌────▼────┐   ┌─────▼────┐   ┌────▼────────┐
+         │lecturers│   │ students │   │  role_data  │
+         └────┬────┘   └────┬─────┘   └──────┬──────┘
+              │             │                │
+     ┌────────┴───┐    ┌────┴──────┐    ┌────▼────┐
+     │   classes  │    │  student  │    │  role   │
+     │(CourseClass│◄───│  _classes │    └─────────┘
+     └──────┬─────┘    └───────────┘
+            │
+   ┌────────┼────────────────────┐
+   │        │                    │
+   ▼        ▼                    ▼
+courses  class_sessions    exam_session
+   │        │                    │
+   ▼        ▼                    ▼
+course_  class_session_      exams
+modules  attendance           │
+   │                          ▼
+   ▼                       questions
+lessons                        │
+   │                           ▼
+   ▼                      question_options
+lesson_
+resources
+```
+
+---
+
+## 3. Nhóm 1 — User & Auth
+
+### Bảng: `users`
+
+> Tài khoản hệ thống — bao gồm cả admin, giảng viên, học viên.
+
+| Cột | Kiểu | Constraint | Mô tả |
+|---|---|---|---|
+| `id` | BIGINT | PK, AUTO_INCREMENT | |
+| `email` | VARCHAR | UNIQUE, NULLABLE | Email đăng nhập |
+| `phone` | VARCHAR | UNIQUE, NULLABLE | Số điện thoại đăng nhập |
+| `password` | VARCHAR | NULLABLE | BCrypt hashed (null nếu OAuth) |
+| `auth_provider` | VARCHAR | | `LOCAL` hoặc `GOOGLE` |
+| `email_verified` | BOOLEAN | | Đã xác thực email chưa |
+| `phone_verified` | BOOLEAN | | Đã xác thực phone chưa |
+| `is_active` | BOOLEAN | DEFAULT true | Tài khoản có đang hoạt động |
+| `first_name` | VARCHAR | NOT NULL | |
+| `last_name` | VARCHAR | NOT NULL | |
+| `full_name` | VARCHAR | NOT NULL | |
+| `last_login_timestamp` | TIMESTAMP | | Lần đăng nhập cuối |
+| `created_at` | TIMESTAMP | | |
+| `updated_at` | TIMESTAMP | | |
+
+**Lưu ý:** Một user có thể đăng nhập bằng email **hoặc** phone — không bắt buộc cả hai.
+
+---
+
+### Bảng: `role`
+
+> Danh sách vai trò trong hệ thống.
+
+| Cột | Kiểu | Constraint | Mô tả |
+|---|---|---|---|
+| `id` | BIGINT | PK | |
+| `role_name` | VARCHAR | | `ADMIN`, `LECTURER`, `STUDENT` |
+| `description` | VARCHAR | | |
+| `created_at` | TIMESTAMP | | |
+| `updated_at` | TIMESTAMP | | |
+| `deleted_at` | TIMESTAMP | NULLABLE | Soft delete |
+
+---
+
+### Bảng: `role_data`
+
+> Bảng junction: gán Role cho User (Many-to-Many có soft delete).
+
+| Cột | Kiểu | Constraint | Mô tả |
+|---|---|---|---|
+| `id` | BIGINT | PK | |
+| `user_id` | BIGINT | FK → users.id | |
+| `role_id` | BIGINT | FK → role.id | |
+| `created_at` | TIMESTAMP | | |
+| `updated_at` | TIMESTAMP | | |
+| `deleted_at` | TIMESTAMP | NULLABLE | Soft delete — thu hồi role |
+
+```
+users (1) ──── (*) role_data (*) ──── (1) role
+```
+
+---
+
+### Bảng: `otp_log`
+
+> Lưu lịch sử OTP đã gửi (SMS/Email).
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `identifier` | VARCHAR | Email hoặc phone nhận OTP |
+| `otp` | VARCHAR | Mã OTP |
+| `expired_at` | TIMESTAMP | Thời hạn OTP |
+| `is_verified` | BOOLEAN | Đã verify chưa |
+| `created_at` | TIMESTAMP | |
+
+---
+
+## 4. Nhóm 2 — Course (Khóa học)
+
+### Sơ đồ quan hệ nhóm Course
+
+```
+course_catalogs ──┐
+course_types    ──┼──► courses ──► course_modules ──► lessons ──► lesson_resources
+me_products     ──┘       │
+                          ├──► course_config
+                          ├──► course_lecturers
+                          ├──► course_property
+                          ├──► course_workflow
+                          └──► course_combos
+```
+
+---
+
+### Bảng: `courses`
+
+> Khóa học — đơn vị nội dung chính.
+
+| Cột | Kiểu | Constraint | Mô tả |
+|---|---|---|---|
+| `id` | BIGINT | PK | |
+| `me_product_id` | BIGINT | FK → me_products.id | Liên kết sản phẩm Me platform |
+| `course_type_id` | BIGINT | FK → course_types.id | Loại khóa học |
+| `course_catalog_id` | BIGINT | FK → course_catalogs.id | Danh mục |
+| `description` | TEXT | | |
+| `avatar_url` | VARCHAR | | Ảnh thumbnail |
+| `intro_video_url` | VARCHAR | | Video giới thiệu |
+| `status` | VARCHAR | | Enum `CourseStatus` |
+| `is_draft` | BOOLEAN | | Đang soạn thảo |
+| `is_visible` | BOOLEAN | DEFAULT false | Hiển thị công khai |
+| `created_id` | BIGINT | FK → users.id | Người tạo |
+| `updated_id` | BIGINT | FK → users.id | Người cập nhật |
+| `created_at` | TIMESTAMP | | |
+| `updated_at` | TIMESTAMP | | |
+| `deleted_at` | TIMESTAMP | NULLABLE | Soft delete |
+
+**CourseStatus enum:** `DRAFT` → `PENDING_REVIEW` → `APPROVED` / `REJECTED`
+
+---
+
+### Bảng: `course_types`
+
+> Phân loại khóa học (VD: "Tiếng Anh", "Lập trình"...).
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `name` | VARCHAR | Tên loại |
+| `description` | TEXT | |
+| `created_at` | TIMESTAMP | |
+| `updated_at` | TIMESTAMP | |
+| `deleted_at` | TIMESTAMP | Soft delete |
+
+---
+
+### Bảng: `course_catalogs`
+
+> Danh mục / ngành học (VD: "Công nghệ thông tin").
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `name` | VARCHAR | |
+| `description` | TEXT | |
+| `created_at` | TIMESTAMP | |
+| `updated_at` | TIMESTAMP | |
+| `deleted_at` | TIMESTAMP | Soft delete |
+
+---
+
+### Bảng: `course_modules`
+
+> Module/chương trong một khóa học.
+
+| Cột | Kiểu | Constraint | Mô tả |
+|---|---|---|---|
+| `id` | BIGINT | PK | |
+| `course_id` | BIGINT | FK → courses.id | |
+| `order_index` | INT | | Thứ tự hiển thị |
+| `name` | VARCHAR | | Tên module |
+| `description` | TEXT | | |
+| `created_id` | BIGINT | FK → users.id | |
+| `updated_id` | BIGINT | FK → users.id | |
+| `created_at` | TIMESTAMP | | |
+| `updated_at` | TIMESTAMP | | |
+| `deleted_at` | TIMESTAMP | | Soft delete |
+
+```
+courses (1) ──── (*) course_modules (1) ──── (*) lessons
+```
+
+---
+
+### Bảng: `lessons`
+
+> Bài học trong một module.
+
+| Cột | Kiểu | Constraint | Mô tả |
+|---|---|---|---|
+| `id` | BIGINT | PK | |
+| `course_module_id` | BIGINT | FK → course_modules.id | |
+| `name` | VARCHAR | | Tên bài học |
+| `description` | TEXT | | |
+| `is_trial` | BOOLEAN | | Học thử miễn phí |
+| `lesson_type` | VARCHAR | | Enum `LessonType` |
+| `order_index` | INT | | Thứ tự |
+| `created_id` | BIGINT | FK → users.id | |
+| `updated_id` | BIGINT | FK → users.id | |
+| `created_at` | TIMESTAMP | | |
+| `updated_at` | TIMESTAMP | | |
+| `deleted_at` | TIMESTAMP | | Soft delete |
+
+**LessonType enum:** `VIDEO`, `DOCUMENT`, `EXERCISE`, `QUIZ`
+
+---
+
+### Bảng: `lesson_resources`
+
+> Tài nguyên đính kèm bài học (file, video, link...).
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `lesson_id` | BIGINT | FK → lessons.id |
+| `name` | VARCHAR | |
+| `url` | VARCHAR | URL tài nguyên |
+| `type` | VARCHAR | Loại tài nguyên |
+| `order_index` | INT | |
+| `created_at` | TIMESTAMP | |
+| `deleted_at` | TIMESTAMP | Soft delete |
+
+---
+
+### Bảng: `course_config`
+
+> Cấu hình riêng của từng khóa học (1-1 với courses).
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `course_id` | BIGINT | FK → courses.id (UNIQUE) |
+| (các cột config) | | Cấu hình tùy chọn |
+
+```
+courses (1) ──── (1) course_config
+```
+
+---
+
+### Bảng: `course_lecturers`
+
+> Giảng viên phụ trách một khóa học (Many-to-Many).
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `course_id` | BIGINT | FK → courses.id |
+| `lecturer_id` | BIGINT | FK → lecturers.id |
+| `created_at` | TIMESTAMP | |
+
+---
+
+### Bảng: `course_workflow` / `course_workflow_steps` / `course_workflow_reviewers`
+
+> Quy trình phê duyệt khóa học.
+
+```
+courses ──► course_workflow ──► course_workflow_steps ──► course_workflow_reviewers
+```
+
+**WorkflowStatus:** `PENDING` → `IN_REVIEW` → `APPROVED` / `REJECTED`
+
+---
+
+### Bảng: `course_property` / `course_property_options` / `course_property_selections`
+
+> Thuộc tính động của khóa học (VD: "Trình độ", "Ngôn ngữ"...).
+
+```
+course_property (định nghĩa thuộc tính)
+    └──► course_property_options (các lựa chọn)
+              └──► course_property_selections (học viên đã chọn)
+```
+
+---
+
+## 5. Nhóm 3 — Class (Lớp học)
+
+### Sơ đồ quan hệ nhóm Class
+
+```
+courses ──► classes (CourseClass)
+               │
+    ┌──────────┼──────────────────────┐
+    │          │                      │
+    ▼          ▼                      ▼
+student_   class_sessions         class_schedules
+_classes       │
+(enrollment)   ├──► class_session_attendance
+               ├──► class_session_files
+               ├──► class_session_assignment
+               └──► class_session_override
+```
+
+---
+
+### Bảng: `classes`
+
+> Lớp học — một khóa học được mở thành nhiều lớp.
+
+| Cột | Kiểu | Constraint | Mô tả |
+|---|---|---|---|
+| `id` | BIGINT | PK | |
+| `name` | VARCHAR | UNIQUE | Tên lớp |
+| `code` | VARCHAR | UNIQUE | Mã lớp |
+| `course_id` | BIGINT | FK → courses.id | |
+| `main_lecturer_id` | BIGINT | FK → lecturers.id | Giảng viên chính |
+| `assistant_id` | BIGINT | FK → lecturers.id | Trợ giảng |
+| `student_count` | INT | | Số học viên hiện tại |
+| `status` | VARCHAR | | Enum `ClassStatus` |
+| `room_link` | VARCHAR | | Link phòng học online |
+| `start_date` | DATE | | Ngày khai giảng |
+| `duration_minutes` | INT | | Thời lượng mỗi buổi (phút) |
+| `note` | TEXT | | |
+| `created_at` | TIMESTAMP | | |
+| `updated_at` | TIMESTAMP | | |
+
+**ClassStatus:** `NOT_STARTED` → `ONGOING` → `COMPLETED` / `CANCELLED`
+
+---
+
+### Bảng: `student_classes`
+
+> Học viên đăng ký vào lớp học (Many-to-Many).
+
+| Cột | Kiểu | Constraint | Mô tả |
+|---|---|---|---|
+| `id` | BIGINT | PK | |
+| `student_id` | BIGINT | FK → students.id | |
+| `class_id` | BIGINT | FK → classes.id | |
+| `joined_at` | TIMESTAMP | | Ngày nhập học |
+| `status` | VARCHAR | | Enum `ClassStudentStatus` |
+
+**UNIQUE:** (`student_id`, `class_id`) — một học viên chỉ vào một lớp một lần.
+
+**ClassStudentStatus:** `MAIN`, `RESERVE`, `TRANSFERRED`, `DROPPED`
+
+---
+
+### Bảng: `class_sessions`
+
+> Buổi học cụ thể (ngày, giờ, giảng viên dạy).
+
+| Cột | Kiểu | Constraint | Mô tả |
+|---|---|---|---|
+| `id` | BIGINT | PK | |
+| `class_id` | BIGINT | FK → classes.id | |
+| `lesson_id` | BIGINT | FK → lessons.id, NULLABLE | Bài học được dạy buổi này |
+| `order_index` | INT | | Số thứ tự buổi |
+| `title` | VARCHAR | | Tiêu đề buổi học |
+| `session_date` | DATE | | Ngày dạy |
+| `start_time` | TIME | | Giờ bắt đầu |
+| `end_time` | TIME | | Giờ kết thúc |
+| `lecturer_id` | BIGINT | | Giảng viên dạy buổi này |
+| `is_extra` | BOOLEAN | | Buổi học bù |
+| `status` | VARCHAR | | Enum `ClassSessionStatus` |
+
+**Index:** `idx_class_session_class` (class_id), `idx_class_session_date` (session_date)
+
+**ClassSessionStatus:** `NOT_COMPLETED` → `COMPLETED` / `CANCELLED`
+
+---
+
+### Bảng: `class_session_attendance`
+
+> Điểm danh học viên trong từng buổi học.
+
+| Cột | Kiểu | Constraint | Mô tả |
+|---|---|---|---|
+| `id` | BIGINT | PK | |
+| `student_id` | BIGINT | FK → students.id | |
+| `class_session_id` | BIGINT | FK → class_sessions.id | |
+| `status` | VARCHAR | | Enum `AttendanceStatus` |
+| `checked_at` | TIMESTAMP | | Thời gian điểm danh |
+| `note` | TEXT | | |
+
+**UNIQUE:** (`student_id`, `class_session_id`)
+
+**AttendanceStatus:** `PRESENT`, `ABSENT`, `LATE`, `EXCUSED`
+
+---
+
+### Bảng: `class_schedules`
+
+> Lịch học định kỳ của lớp (VD: Thứ 2-4-6, 18:00-20:00).
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `class_id` | BIGINT | FK → classes.id |
+| `day_of_week` | INT | 1=Thứ 2, ..., 7=Chủ nhật |
+| `start_time` | TIME | |
+| `end_time` | TIME | |
+
+---
+
+### Bảng: `class_session_files`
+
+> Tài liệu giáo viên upload trong buổi học.
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `class_session_id` | BIGINT | FK → class_sessions.id |
+| `file_id` | BIGINT | FK → files.id |
+| `type` | VARCHAR | Enum `SessionFileType` |
+
+---
+
+### Bảng: `class_session_assignment`
+
+> Bài tập được giao trong buổi học.
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `class_session_id` | BIGINT | FK → class_sessions.id |
+| `title` | VARCHAR | |
+| `description` | TEXT | |
+| `due_date` | TIMESTAMP | Deadline nộp bài |
+
+---
+
+### Bảng: `student_assignments`
+
+> Bài nộp của học viên.
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `assignment_id` | BIGINT | FK → class_session_assignment.id |
+| `student_id` | BIGINT | FK → students.id |
+| `submitted_at` | TIMESTAMP | |
+| `status` | VARCHAR | Enum `StudentAssignmentStatus` |
+| `score` | DECIMAL | Điểm chấm |
+| `feedback` | TEXT | |
+
+---
+
+### Bảng: `class_score_config`
+
+> Cấu hình thang điểm của lớp học (1-1 với classes).
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `class_id` | BIGINT | FK → classes.id (UNIQUE) |
+| `score_type` | VARCHAR | Enum `ScoreType` |
+| (các cột config điểm) | | |
+
+---
+
+### Bảng: `class_lecturers`
+
+> Giảng viên tham gia dạy lớp (có thể nhiều giảng viên luân phiên).
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `class_id` | BIGINT | FK → classes.id |
+| `lecturer_id` | BIGINT | FK → lecturers.id |
+| `role` | VARCHAR | `MAIN`, `ASSISTANT` |
+
+---
+
+### Bảng: `class_session_override`
+
+> Ghi đè thông tin buổi học (VD: đổi giờ, đổi giảng viên đột xuất).
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `class_session_id` | BIGINT | FK → class_sessions.id |
+| `override_type` | VARCHAR | Enum `OverrideType` |
+| `new_value` | TEXT | Giá trị mới |
+| `reason` | TEXT | Lý do thay đổi |
+
+---
+
+### Nhóm Task trong Class
+
+```
+class_sessions ──► lesson_tasks (Nhiệm vụ học tập)
+                       │
+          ┌────────────┼────────────┐
+          │            │            │
+          ▼            ▼            ▼
+   student_tasks  lesson_task_  lesson_task_
+   (học viên      tickets       messages
+   làm task)      (hỗ trợ)      (chat)
+```
+
+---
+
+### Nhóm Post trong Class
+
+> Bảng thảo luận / bài đăng trong lớp học.
+
+```
+class_posts ──► class_post_attachments
+    │
+    └──► class_post_comments
+```
+
+| Bảng | Mô tả |
+|---|---|
+| `class_posts` | Bài đăng trong lớp |
+| `class_post_attachments` | File đính kèm bài đăng |
+| `class_post_comments` | Bình luận |
+
+---
+
+## 6. Nhóm 4 — Exam (Kiểm tra)
+
+### Sơ đồ quan hệ nhóm Exam
+
+```
+exams ──────────────────────────────────────┐
+  │                                          │
+  ├──► exam_questions                        │
+  │       └──► exam_question_snapshots       │
+  │               └──► exam_question_option_snapshots
+  │                                          │
+  ├──► exam_random_question_types            │
+  ├──► exam_random_tags                      │
+  └──► exam_random_difficulty_ratios         │
+                                             │
+exam_session ◄──────────────────────────────┘
+  │  (class_id FK → classes)
+  └──► exam_session_type
+```
+
+---
+
+### Bảng: `exams`
+
+> Đề thi — bộ câu hỏi được cấu hình.
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `name` | VARCHAR | Tên đề thi |
+| `mode` | VARCHAR | Enum `ExamMode`: `MANUAL` hoặc `RANDOM` |
+| `total_questions` | INT | Tổng số câu hỏi |
+| `duration_minutes` | INT | Thời gian làm bài |
+| `total_score` | INT | Điểm tối đa |
+| `is_shuffle_question` | BOOLEAN | Xáo trộn thứ tự câu hỏi |
+| `is_shuffle_answer` | BOOLEAN | Xáo trộn đáp án |
+| `is_show_result` | BOOLEAN | Hiển thị kết quả sau khi nộp |
+| `attempt_limit` | INT | Số lần làm tối đa (null = không giới hạn) |
+| `status` | VARCHAR | Enum `ExamStatus` |
+| `is_draft` | BOOLEAN | |
+| `created_id` | BIGINT | FK → users.id |
+| `created_at` | TIMESTAMP | |
+| `deleted_at` | TIMESTAMP | Soft delete |
+
+**ExamMode:** `MANUAL` (chọn câu thủ công) | `RANDOM` (hệ thống random theo tiêu chí)
+
+---
+
+### Bảng: `questions`
+
+> Ngân hàng câu hỏi — dùng chung cho nhiều đề thi.
+
+| Cột | Kiểu | Constraint | Mô tả |
+|---|---|---|---|
+| `id` | BIGINT | PK | |
+| `question_type_id` | BIGINT | FK → question_types.id | |
+| `course_catalog_id` | BIGINT | FK → course_catalogs.id | Thuộc ngành nào |
+| `difficulty` | VARCHAR | | Enum `Difficulty` |
+| `content` | TEXT | | Nội dung câu hỏi |
+| `explanation` | TEXT | | Giải thích đáp án |
+| `is_multiple_answer` | BOOLEAN | | Nhiều đáp án đúng |
+| `is_active` | BOOLEAN | | Câu hỏi đang active |
+| `allow_in_exam` | BOOLEAN | | Cho phép dùng trong thi |
+| `created_id` | BIGINT | | |
+| `created_at` | TIMESTAMP | | |
+| `deleted_at` | TIMESTAMP | | Soft delete |
+
+**Difficulty:** `EASY`, `MEDIUM`, `HARD`
+
+---
+
+### Bảng: `question_options`
+
+> Các đáp án của câu hỏi trắc nghiệm.
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `question_id` | BIGINT | FK → questions.id |
+| `content` | TEXT | Nội dung đáp án |
+| `is_correct` | BOOLEAN | Đây có phải đáp án đúng không |
+| `order_index` | INT | Thứ tự hiển thị |
+
+---
+
+### Bảng: `question_types`
+
+> Loại câu hỏi (VD: Trắc nghiệm, Tự luận, Điền vào chỗ trống...).
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `name` | VARCHAR | |
+| `code` | VARCHAR | |
+
+---
+
+### Bảng: `question_tags` / `question_tag_binding`
+
+> Tag/nhãn phân loại câu hỏi theo chủ đề.
+
+```
+questions (*) ──── (*) question_tags
+     (qua bảng question_tag_binding)
+```
+
+---
+
+### Bảng: `exam_session`
+
+> Lần thi của một lớp học — gắn đề thi với lớp và thời gian mở thi.
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `name` | VARCHAR | |
+| `class_id` | BIGINT | FK → classes.id |
+| `exam_id` | BIGINT | FK → exams.id |
+| `exam_session_type_id` | BIGINT | FK → exam_session_types.id |
+| `exam_session_name` | VARCHAR | |
+| `description` | TEXT | |
+| `start_time` | TIMESTAMP | Mở thi lúc |
+| `end_time` | TIMESTAMP | Đóng thi lúc |
+| `is_show_countdown` | BOOLEAN | Hiển thị đếm ngược |
+| `is_auto_submit` | BOOLEAN | Tự nộp khi hết giờ |
+| `created_id` | BIGINT | |
+| `created_at` | TIMESTAMP | |
+
+---
+
+### Bảng: `exam_questions` / `exam_question_snapshots`
+
+> Snapshot câu hỏi tại thời điểm thi — tránh bị ảnh hưởng khi câu hỏi gốc bị sửa.
+
+```
+exams ──► exam_questions (FK → questions)
+               └──► exam_question_snapshots (bản sao tại thời điểm thi)
+                         └──► exam_question_option_snapshots (bản sao đáp án)
+```
+
+---
+
+## 7. Nhóm 5 — Integration (Tích hợp)
+
+> Dữ liệu đồng bộ từ hệ thống ngoài: **Me e-learning platform**.
+
+### Sơ đồ
+
+```
+me_products ──► courses (liên kết sản phẩm)
+
+orders ──────────────────────────────────────────┐
+  │                                               │
+  ├──► order_items (FK → me_products)             │
+  ├──► payment_schedules (lịch trả góp)           │
+  └──► student_guardians ────► guardians          │
+                                                  │
+payment_transactions (lịch sử thanh toán) ────────┘
+```
+
+---
+
+### Bảng: `students`
+
+> Profile học viên (mở rộng từ users).
+
+| Cột | Kiểu | Constraint | Mô tả |
+|---|---|---|---|
+| `id` | BIGINT | PK | |
+| `user_id` | BIGINT | FK → users.id, UNIQUE | 1-1 với users |
+| `date_of_birth` | DATE | | |
+| `gender` | VARCHAR | | Enum `Gender` |
+| `address` | TEXT | | |
+| `organization` | VARCHAR | | Tổ chức/trường |
+| `education` | VARCHAR | | Trình độ học vấn |
+| `created_at` | TIMESTAMP | | |
+| `updated_at` | TIMESTAMP | | |
+
+```
+users (1) ──── (1) students
+```
+
+---
+
+### Bảng: `orders`
+
+> Đơn hàng mua khóa học (sync từ Me platform).
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `me_order_id` | VARCHAR | ID đơn hàng bên Me (UNIQUE) |
+| `status` | VARCHAR | Enum `OrderStatus` |
+| `total_amount` | DECIMAL | Tổng tiền |
+| `paid_amount` | DECIMAL | Đã thanh toán |
+| `remaining_amount` | DECIMAL | Còn phải trả |
+| `installment_count` | INT | Số kỳ trả góp |
+| `cancelled_at` | TIMESTAMP | |
+| `created_at` | TIMESTAMP | |
+
+**OrderStatus:** `PENDING` → `PAID` / `CANCELLED` / `PARTIAL`
+
+---
+
+### Bảng: `order_items`
+
+> Chi tiết sản phẩm trong đơn hàng.
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `order_id` | BIGINT | FK → orders.id |
+| `me_product_id` | BIGINT | FK → me_products.id |
+| `quantity` | INT | |
+| `unit_price` | DECIMAL | |
+
+---
+
+### Bảng: `payment_schedules`
+
+> Lịch trả góp của đơn hàng.
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `order_id` | BIGINT | FK → orders.id |
+| `due_date` | DATE | Ngày đến hạn |
+| `amount` | DECIMAL | Số tiền kỳ này |
+| `status` | VARCHAR | Enum `PaymentScheduleStatus` |
+
+---
+
+### Bảng: `payment_transactions`
+
+> Lịch sử giao dịch thanh toán thực tế.
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `order_id` | BIGINT | FK → orders.id |
+| `amount` | DECIMAL | |
+| `method` | VARCHAR | Enum `PaymentMethod` |
+| `provider` | VARCHAR | Enum `PaymentProviderType` |
+| `status` | VARCHAR | Enum `PaymentStatus` |
+| `transaction_ref` | VARCHAR | Mã giao dịch từ cổng thanh toán |
+| `paid_at` | TIMESTAMP | |
+
+---
+
+### Bảng: `guardians` / `student_guardians`
+
+> Phụ huynh / người giám hộ của học viên.
+
+```
+students (*) ──── (*) guardians
+     (qua bảng student_guardians)
+```
+
+---
+
+### Bảng: `me_products`
+
+> Sản phẩm đồng bộ từ Me e-learning platform.
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `me_product_id` | VARCHAR | ID bên Me (UNIQUE) |
+| `name` | VARCHAR | |
+| `price` | DECIMAL | |
+| `created_at` | TIMESTAMP | |
+
+---
+
+## 8. Nhóm 6 — Lecturer (Giảng viên)
+
+### Bảng: `lecturers`
+
+> Profile giảng viên (mở rộng từ users).
+
+| Cột | Kiểu | Constraint | Mô tả |
+|---|---|---|---|
+| `id` | BIGINT | PK | |
+| `user_id` | BIGINT | FK → users.id, UNIQUE | 1-1 với users |
+| `code` | VARCHAR | NOT NULL, UNIQUE | Mã giảng viên |
+| `date_of_birth` | DATE | | |
+| `avatar_url` | VARCHAR | | |
+| `degree` | VARCHAR | | Bằng cấp |
+| `expertise` | VARCHAR | | Chuyên môn |
+| `address` | TEXT | | |
+| `gender` | VARCHAR | | Enum `Gender` |
+| `education_level` | VARCHAR | | Trình độ học vấn |
+| `teaching_role` | VARCHAR | | Enum `TeachingRole` |
+| `identification_number` | VARCHAR | | CCCD/CMND |
+| `experience` | TEXT | | Kinh nghiệm |
+| `is_active` | BOOLEAN | DEFAULT true | |
+| `note` | TEXT | | |
+| `created_at` | TIMESTAMP | | |
+| `updated_at` | TIMESTAMP | | |
+| `deleted_at` | TIMESTAMP | | Soft delete |
+
+**TeachingRole:** `LECTURER`, `ASSISTANT`, `TUTOR`
+
+```
+users (1) ──── (1) lecturers
+```
+
+---
+
+### Bảng: `lecturer_contracts`
+
+> Hợp đồng giảng dạy của giảng viên.
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `lecturer_id` | BIGINT | FK → lecturers.id |
+| `contract_type` | VARCHAR | Enum `LecturerContractType` |
+| `status` | VARCHAR | Enum `ContractStatus` |
+| `start_date` | DATE | |
+| `end_date` | DATE | |
+| `salary` | DECIMAL | |
+
+---
+
+## 9. Nhóm 7 — Learning Path (Lộ trình)
+
+### Bảng: `learning_paths` / `learning_path_courses`
+
+> Lộ trình học — tập hợp nhiều khóa học theo thứ tự.
+
+```
+learning_paths (1) ──── (*) learning_path_courses (*) ──── (1) courses
+```
+
+| Bảng | Mô tả |
+|---|---|
+| `learning_paths` | Lộ trình tổng thể |
+| `learning_path_courses` | Khóa học trong lộ trình (có order_index) |
+
+---
+
+## 10. Nhóm 8 — Misa (Kế toán)
+
+> Dữ liệu đồng bộ từ phần mềm kế toán **Misa**.
+
+| Bảng | Mô tả |
+|---|---|
+| `misa_account_objects` | Đối tượng kế toán |
+| `misa_inventory_items` | Mặt hàng tồn kho |
+| `misa_organization_units` | Đơn vị tổ chức |
+| `misa_units` | Đơn vị tính |
+| `sync_metadata` | Metadata theo dõi lần sync cuối |
+
+---
+
+## 11. Nhóm 9 — System (Hệ thống)
+
+### Bảng: `files`
+
+> Quản lý file upload.
+
+| Cột | Kiểu | Mô tả |
+|---|---|---|
+| `id` | BIGINT | PK |
+| `name` | VARCHAR | Tên file gốc |
+| `storage_key` | VARCHAR | Đường dẫn lưu trong storage |
+| `mime_type` | VARCHAR | `image/png`, `application/pdf`... |
+| `size` | BIGINT | Kích thước (bytes) |
+| `status` | VARCHAR | Enum `FileStatus` |
+| `created_at` | TIMESTAMP | |
+
+---
+
+### Bảng: `search_keywords` / `course_search_keywords`
+
+> Index từ khóa tìm kiếm.
+
+---
+
+## 12. Design Patterns trong Database
+
+### Pattern 1: Soft Delete
+
+> **Không xóa dữ liệu thật** — chỉ set `deleted_at`.
+
+```sql
+-- Thay vì DELETE:
+UPDATE courses SET deleted_at = NOW() WHERE id = 1;
+
+-- Query luôn filter:
+SELECT * FROM courses WHERE deleted_at IS NULL;
+```
+
+Các bảng có soft delete: `users` (không có), `role`, `role_data`, `courses`, `course_modules`, `lessons`, `lecturers`, `exams`, `questions`...
+
+---
+
+### Pattern 2: Audit Fields
+
+> Mọi bảng có `created_at` / `updated_at`, một số bảng có `created_id` / `updated_id`.
+
+```java
+@PrePersist
+protected void onCreate() {
+    createdAt = LocalDateTime.now();  // Tự set khi INSERT
+    updatedAt = LocalDateTime.now();
+}
+
+@PreUpdate
+protected void onUpdate() {
+    updatedAt = LocalDateTime.now();  // Tự set khi UPDATE
+}
+```
+
+---
+
+### Pattern 3: Snapshot Pattern (Exam)
+
+> Sao chép câu hỏi tại thời điểm thi — tránh bị ảnh hưởng khi câu hỏi gốc bị sửa/xóa.
+
+```
+questions (ngân hàng gốc)
+    └──► exam_questions (câu hỏi được chọn vào đề)
+              └──► exam_question_snapshots (BẢN SAO khi mở thi)
+                        └──► exam_question_option_snapshots
+```
+
+Khi học viên làm bài, hệ thống đọc từ `exam_question_snapshots` thay vì `questions`.
+
+---
+
+### Pattern 4: User Profile Extension
+
+> `users` là bảng gốc — mở rộng bằng bảng riêng theo vai trò.
+
+```
+users (1) ──── (1) students    [thêm: ngày sinh, giới tính, địa chỉ]
+users (1) ──── (1) lecturers   [thêm: mã GV, bằng cấp, chuyên môn]
+```
+
+Không dùng inheritance trong DB — dùng quan hệ 1-1.
+
+---
+
+### Pattern 5: Junction Table (Many-to-Many)
+
+| Junction Table | Nối hai bảng | Có soft delete? |
+|---|---|---|
+| `role_data` | `users` ↔ `role` | Có (`deleted_at`) |
+| `student_classes` | `students` ↔ `classes` | Không (có `status`) |
+| `course_lecturers` | `courses` ↔ `lecturers` | Không |
+| `class_lecturers` | `classes` ↔ `lecturers` | Không |
+| `question_tag_binding` | `questions` ↔ `question_tags` | Không |
+| `learning_path_courses` | `learning_paths` ↔ `courses` | Không |
+
+---
+
+### Pattern 6: Configurable via Enum stored as String
+
+> Tất cả enum lưu dạng `VARCHAR` trong DB (không lưu số).
+
+```java
+@Enumerated(EnumType.STRING)  // Lưu "ONGOING" thay vì 1
+private ClassStatus status;
+```
+
+**Ưu điểm:** Dễ đọc khi query thẳng DB, không bị ảnh hưởng khi thêm/xóa enum value.
+
+---
+
+## 13. Enum toàn dự án
+
+| Enum | Giá trị | Dùng ở bảng |
+|---|---|---|
+| `AuthType` | `LOCAL`, `GOOGLE` | `users.auth_provider` |
+| `CourseStatus` | `DRAFT`, `PENDING_REVIEW`, `APPROVED`, `REJECTED` | `courses.status` |
+| `ClassStatus` | `NOT_STARTED`, `ONGOING`, `COMPLETED`, `CANCELLED` | `classes.status` |
+| `ClassSessionStatus` | `NOT_COMPLETED`, `COMPLETED`, `CANCELLED` | `class_sessions.status` |
+| `ClassStudentStatus` | `MAIN`, `RESERVE`, `TRANSFERRED`, `DROPPED` | `student_classes.status` |
+| `AttendanceStatus` | `PRESENT`, `ABSENT`, `LATE`, `EXCUSED` | `class_session_attendance.status` |
+| `ExamMode` | `MANUAL`, `RANDOM` | `exams.mode` |
+| `ExamStatus` | `DRAFT`, `ACTIVE`, `CLOSED` | `exams.status` |
+| `Difficulty` | `EASY`, `MEDIUM`, `HARD` | `questions.difficulty` |
+| `LessonType` | `VIDEO`, `DOCUMENT`, `EXERCISE`, `QUIZ` | `lessons.lesson_type` |
+| `OrderStatus` | `PENDING`, `PAID`, `CANCELLED`, `PARTIAL` | `orders.status` |
+| `PaymentStatus` | `PENDING`, `SUCCESS`, `FAILED` | `payment_transactions.status` |
+| `PaymentMethod` | `CASH`, `TRANSFER`, `ONEPAY` | `payment_transactions.method` |
+| `Gender` | `MALE`, `FEMALE`, `OTHER` | `students.gender`, `lecturers.gender` |
+| `RoleType` | `ADMIN`, `LECTURER`, `STUDENT` | `role.role_name` |
+| `TeachingRole` | `LECTURER`, `ASSISTANT`, `TUTOR` | `lecturers.teaching_role` |
+| `WorkflowStatus` | `PENDING`, `IN_REVIEW`, `APPROVED`, `REJECTED` | `course_workflow.status` |
+| `FileStatus` | `ACTIVE`, `DELETED` | `files.status` |
+| `StorageProviderType` | `LOCAL`, `AWS` | config |
+| `PaymentProviderType` | `ONEPAY`, `ME` | config |
+
+---
+
+## 14. Index & Constraint
+
+### Index quan trọng
+
+```sql
+-- class_sessions: query theo lớp và ngày học (thường xuyên dùng)
+CREATE INDEX idx_class_session_class ON class_sessions(class_id);
+CREATE INDEX idx_class_session_date  ON class_sessions(session_date);
+```
+
+### Unique Constraints
+
+```sql
+-- users
+UNIQUE (email)
+UNIQUE (phone)
+
+-- classes
+UNIQUE (name)
+UNIQUE (code)
+
+-- lecturers
+UNIQUE (code)
+
+-- student_classes: 1 học viên chỉ vào 1 lớp 1 lần
+UNIQUE (student_id, class_id)
+
+-- class_session_attendance: 1 học viên điểm danh 1 lần/buổi
+UNIQUE (student_id, class_session_id)
+
+-- orders: đồng bộ Me
+UNIQUE (me_order_id)
+
+-- me_products
+UNIQUE (me_product_id)
+```
+
+---
+
+## Tóm tắt số lượng bảng theo nhóm
+
+| Nhóm | Số bảng | Chức năng |
+|---|---|---|
+| User & Auth | 4 | Đăng nhập, phân quyền, OTP |
+| Course | 16 | Khóa học, module, bài học, duyệt bài |
+| Class | 16 | Lớp học, lịch học, điểm danh, bài tập |
+| Exam | 12 | Đề thi, câu hỏi, lần thi |
+| Integration | 7 | Học viên, đơn hàng, thanh toán |
+| Lecturer | 2 | Giảng viên, hợp đồng |
+| Learning Path | 2 | Lộ trình học |
+| Misa | 5 | Kế toán |
+| System | 4 | File, từ khóa, sync |
+| **Tổng** | **~68** | |
+
+---
+
+*Tài liệu này được tạo dựa trên Entity classes trong codebase Cole LMS.*  
+*Cập nhật lần cuối: 2026-05-21*
