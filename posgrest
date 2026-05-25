@@ -1,0 +1,814 @@
+# Sơ đồ kiến trúc Database (ERD)
+
+```mermaid
+erDiagram
+    class_lecturers {
+        bigint id
+        bigint class_id
+        bigint lecturer_id
+    }
+    class_post_attachments {
+        bigint id
+        bigint file_id
+        bigint post_id
+    }
+    class_post_comments {
+        bigint id
+        text content
+        timestamp(6) created_at
+        bigint post_id
+        bigint user_id
+    }
+    class_posts {
+        bigint id
+        text content
+        timestamp(6) created_at
+        timestamp(6) deleted_at
+        boolean is_pinned
+        boolean send_email
+        character title
+        timestamp(6) updated_at
+        bigint class_id
+        bigint created_by
+    }
+    class_schedules {
+        bigint id
+        character day_of_week
+        time(0) end_time
+        time(0) start_time
+        bigint class_id
+    }
+    class_score_configs {
+        bigint id
+        integer attendance_percent
+        integer lesson_percent
+        integer project_percent
+        bigint class_id
+    }
+    class_session_assignments {
+        bigint id
+        boolean allow_late_submit
+        character assignment_mode
+        timestamp(6) deadline
+        text note
+        numeric(10 score_scale
+        character score_type
+        character title
+        bigint answer_file_id
+        bigint class_session_id
+    }
+    class_session_attendance {
+        bigint id
+        timestamp(6) checked_at
+        character note
+        character status
+        bigint student_id
+        bigint class_session_id
+    }
+    class_session_exams {
+        bigint id
+        timestamp(6) created_at
+        timestamp(6) end_time
+        character exam_type
+        text note
+        timestamp(6) start_time
+        character title
+        bigint exam_file_id
+        bigint session_id
+    }
+    class_session_overrides {
+        bigint id
+        bigint assistantid
+        character cancelreason
+        timestamp(6) createdat
+        character note
+        bigint substitutelecturerid
+        character type
+        bigint session_id
+    }
+    class_sessions {
+        bigint id
+        time(0) end_time
+        boolean is_extra
+        bigint lecturer_id
+        integer order_index
+        date session_date
+        time(0) start_time
+        character status
+        character title
+        bigint class_id
+    }
+    classes {
+        bigint id
+        character code
+        timestamp(6) created_at
+        integer duration_minutes
+        character name
+        character note
+        character room_link
+        date start_date
+        character status
+        integer student_count
+    }
+    course_catalogs {
+        bigint id
+        timestamp(6) created_at
+        timestamp(6) deleted_at
+        character description
+        boolean is_active
+        integer level
+        character name
+        timestamp(6) updated_at
+        bigint created_id
+        bigint parent_id
+    }
+    course_combos {
+        bigint id
+        bigint course_id
+    }
+    course_configs {
+        bigint course_id
+        boolean allow_late_submit
+        boolean auto_notify
+        timestamp(6) created_at
+        boolean enable_discussion
+        boolean preview_mode
+        boolean sequential_learning
+        timestamp(6) updated_at
+    }
+    course_lecturers {
+        bigint id
+        timestamp(6) created_at
+        timestamp(6) deleted_at
+        bigint course_id
+        bigint lecturer_id
+    }
+    course_modules {
+        bigint id
+        timestamp(6) created_at
+        timestamp(6) deleted_at
+        character description
+        character name
+        integer order_index
+        timestamp(6) updated_at
+        bigint course_id
+        bigint created_id
+        bigint updated_id
+    }
+    course_properties {
+        bigint id
+        timestamp(6) created_at
+        bigint created_id
+        timestamp(6) deleted_at
+        character description
+        boolean is_active
+        character name
+        timestamp(6) updated_at
+        bigint updated_id
+    }
+    course_property_options {
+        bigint id
+        timestamp(6) created_at
+        timestamp(6) deleted_at
+        character description
+        boolean is_active
+        character name
+        timestamp(6) updated_at
+        bigint course_property_id
+    }
+    course_property_selections {
+        bigint id
+        bigint course_id
+        bigint course_property_id
+        bigint course_property_option_id
+    }
+    course_recommendations {
+        bigint id
+        bigint course_id
+        bigint recommended_course_id
+    }
+    course_search_keywords {
+        bigint id
+        timestamp(6) created_at
+        timestamp(6) deleted_at
+        bigint course_id
+        bigint search_keyword_id
+    }
+    course_types {
+        bigint id
+        timestamp(6) created_at
+        timestamp(6) deleted_at
+        character description
+        boolean is_active
+        character name
+        timestamp(6) updated_at
+        bigint created_id
+        bigint updated_id
+    }
+    course_workflow_reviewers {
+        bigint id
+        timestamp(6) created_at
+        integer cycle
+        timestamp(6) deadline
+        character note
+        character status
+        integer step
+        timestamp(6) updated_at
+        bigint course_id
+        bigint reviewer_id
+    }
+    course_workflow_step {
+        bigint id
+        character action
+        timestamp(6) created_at
+        integer cycle
+        character note
+        integer step
+        bigint action_by
+        bigint course_id
+    }
+    course_workflows {
+        bigint id
+        timestamp(6) created_at
+        integer current_step
+        integer cycle
+        integer total_step
+        timestamp(6) updated_at
+        bigint course_id
+    }
+    courses {
+        bigint id
+        character avatar_url
+        timestamp(6) created_at
+        timestamp(6) deleted_at
+        character description
+        character intro_video_url
+        boolean is_draft
+        boolean is_visible
+        character status
+        timestamp(6) updated_at
+    }
+    exam_question_option_snapshots {
+        bigint id
+        text content
+        boolean is_correct
+        integer order_index
+        bigint exam_question_snapshot_id
+    }
+    exam_question_snapshots {
+        bigint id
+        text content
+        character difficulty
+        text explanation
+        bigint exam_question_id
+        bigint question_type_id
+    }
+    exam_questions {
+        bigint id
+        timestamp(6) created_at
+        integer order_index
+        integer score
+        bigint exam_id
+        bigint question_id
+    }
+    exam_random_difficulty_ratios {
+        bigint id
+        character difficulty
+        integer percentage
+        bigint exam_id
+    }
+    exam_random_question_types {
+        bigint id
+        bigint exam_id
+        bigint question_type_id
+    }
+    exam_random_tags {
+        bigint id
+        bigint exam_id
+        bigint question_tag_id
+    }
+    exam_session {
+        bigint id
+        timestamp(6) created_at
+        bigint created_id
+        character description
+        timestamp(6) end_time
+        character exam_session_name
+        boolean is_auto_submit
+        boolean is_show_countdown
+        character name
+        timestamp(6) start_time
+    }
+    exam_session_type {
+        bigint id
+        character name
+    }
+    exams {
+        bigint id
+        integer attempt_limit
+        timestamp(6) created_at
+        bigint created_id
+        timestamp(6) deleted_at
+        integer duration_minutes
+        boolean is_draft
+        boolean is_show_result
+        boolean is_shuffle_answer
+        boolean is_shuffle_question
+    }
+    files {
+        bigint id
+        character content_type
+        timestamp(6) created_at
+        character file_key
+        character file_type
+        boolean is_private
+        character origin_name
+        bigint size
+        character status
+        character storage_provider_type
+    }
+    guardians {
+        bigint id
+        character address
+        character email
+        character identification_number
+        character name
+        character phone
+    }
+    learning_path_course {
+        bigint id
+        bigint index
+        bigint course_id
+        bigint learning_path_id
+    }
+    learning_paths {
+        bigint id
+        timestamp(6) created_at
+        timestamp(6) deleted_at
+        boolean is_active
+        character name
+        timestamp(6) updated_at
+        bigint created_id
+    }
+    lecturer_contracts {
+        bigint id
+        character code
+        timestamp(6) created_at
+        timestamp(6) deleted_at
+        date end_date
+        character note
+        date start_date
+        character contract_type
+        timestamp(6) updated_at
+        bigint file_id
+    }
+    lecturers {
+        bigint id
+        character address
+        character avatar_url
+        character code
+        timestamp(6) created_at
+        date date_of_birth
+        character degree
+        timestamp(6) deleted_at
+        character education_level
+        character experience
+    }
+    lesson_resources {
+        bigint id
+        timestamp(6) created_at
+        integer order_index
+        character title
+        timestamp(6) updated_at
+        bigint created_id
+        bigint file_id
+        bigint lesson_id
+        bigint updated_id
+    }
+    lesson_task_message_attachments {
+        bigint id
+        bigint file_id
+        bigint message_id
+    }
+    lesson_task_messages {
+        bigint id
+        text content
+        timestamp(6) created_at
+        character sender_type
+        bigint sender_id
+        bigint student_id
+        bigint lesson_task_id
+    }
+    lesson_task_ticket_attachments {
+        bigint id
+        bigint file_id
+        bigint ticket_id
+    }
+    lesson_task_tickets {
+        bigint id
+        boolean auto_complete_task
+        smallint category
+        timestamp(6) closed_at
+        timestamp(6) created_at
+        text description
+        character status
+        character title
+        bigint assigned_to
+        bigint created_by
+    }
+    lesson_tasks {
+        bigint id
+        text description
+        boolean is_preview
+        character name
+        bigint class_session_id
+    }
+    lessons {
+        bigint id
+        timestamp(6) created_at
+        timestamp(6) deleted_at
+        character description
+        boolean is_trial
+        character lesson_type
+        character name
+        integer order_index
+        timestamp(6) updated_at
+        bigint course_module_id
+    }
+    me_products {
+        bigint id
+        character code
+        character name
+    }
+    misa_account_objects {
+        bigint id
+        character account_object_code
+        character account_object_id
+        character account_object_name
+        character company_tax_code
+        boolean inactive
+        character raw_data
+    }
+    misa_inventory_items {
+        bigint id
+        boolean inactive
+        character inventory_item_code
+        character inventory_item_id
+        character inventory_item_name
+        integer inventory_item_type
+        text raw_data
+        character unit_id
+        character unit_name
+    }
+    misa_organization_units {
+        bigint id
+        character branch_id
+        character organization_unit_code
+        character organization_unit_id
+        character organization_unit_name
+        integer organization_unit_type_id
+        text raw_data
+    }
+    misa_units {
+        bigint id
+        boolean inactive
+        character raw_data
+        character unit_id
+        character unit_name
+    }
+    order_items {
+        bigint id
+        character commitment_level
+        bigint course_id
+        character learning_goal
+        numeric(38 original_price
+        character sale_level
+        numeric(38 selling_price
+        bigint order_id
+    }
+    orders {
+        bigint id
+        timestamp(6) cancelled_at
+        timestamp(6) created_at
+        integer installment_count
+        character me_order_id
+        numeric(38 paid_amount
+        numeric(38 remaining_amount
+        character status
+        numeric(38 total_amount
+        timestamp(6) updated_at
+    }
+    otp_logs {
+        bigint id
+        integer attempt_count
+        character channel
+        timestamp(6) created_at
+        timestamp(6) expired_at
+        character otp
+        text payload
+        character provider
+        character recipient
+        text response
+    }
+    payment_schedules {
+        bigint id
+        numeric(38 amount
+        timestamp(6) confirmation_date
+        timestamp(6) created_at
+        timestamp(6) due_date
+        integer installment_no
+        numeric(38 paid_amount
+        timestamp(6) paid_date
+        character payment_method
+        character status
+    }
+    payment_transactions {
+        bigint id
+        numeric(38 amount
+        timestamp(6) created_at
+        character provider
+        text raw_response
+        character response_code
+        character response_message
+        character status
+        character transaction_ref
+        timestamp(6) updated_at
+    }
+    question_options {
+        bigint id
+        text content
+        boolean is_correct
+        integer order_index
+        bigint question_id
+    }
+    question_tag_bindings {
+        bigint id
+        timestamp(6) created_at
+        bigint question_id
+        bigint question_tag_id
+    }
+    question_tags {
+        bigint id
+        timestamp(6) created_at
+        character name
+    }
+    question_types {
+        bigint id
+        timestamp(6) created_at
+        bigint created_id
+        timestamp(6) deleted_at
+        character description
+        boolean is_active
+        character name
+        timestamp(6) updated_at
+        bigint updated_id
+    }
+    questions {
+        bigint id
+        boolean allow_in_exam
+        text content
+        timestamp(6) created_at
+        bigint created_id
+        timestamp(6) deleted_at
+        character difficulty
+        text explanation
+        boolean is_active
+        boolean is_multiple_answer
+    }
+    role {
+        bigint id
+        timestamp(6) created_at
+        timestamp(6) deleted_at
+        character description
+        character role_name
+        timestamp(6) updated_at
+    }
+    role_data {
+        bigint id
+        timestamp(6) created_at
+        timestamp(6) deleted_at
+        timestamp(6) updated_at
+        bigint role_id
+        bigint user_id
+    }
+    search_keywords {
+        bigint id
+        timestamp(6) created_at
+        bigint created_id
+        timestamp(6) deleted_at
+        character description
+        boolean is_active
+        character name
+        character search_level
+        timestamp(6) updated_at
+        bigint updated_id
+    }
+    session_files {
+        bigint id
+        timestamp(6) created_at
+        character type
+        bigint file_id
+        bigint session_id
+    }
+    session_incidents {
+        bigint id
+        character action_type
+        timestamp(6) created_at
+        character incident_type
+        text note
+        timestamp(6) reported_at
+        boolean send_notification
+        bigint replacement_lecturer_id
+        bigint reported_by
+        bigint session_id
+    }
+    student_assignments {
+        bigint id
+        timestamp(6) graded_date
+        numeric(10 score
+        character status
+        timestamp(6) submission_date
+        text teacher_note
+        bigint assignment_id
+        bigint student_id
+        bigint submission_file_id
+    }
+    student_classes {
+        bigint id
+        timestamp(6) joined_at
+        character status
+        bigint class_id
+        bigint student_id
+    }
+    student_exams {
+        bigint id
+        timestamp(6) graded_at
+        text note
+        numeric(10 score
+        character status
+        timestamp(6) submitted_at
+        bigint exam_id
+        bigint student_id
+        bigint submission_file_id
+    }
+    student_guardians {
+        bigint id
+        bigint guardian_id
+        bigint order_id
+        bigint student_id
+    }
+    student_tasks {
+        bigint id
+        timestamp(6) completed_at
+        boolean is_checked
+        boolean is_completed
+        bigint student_id
+        bigint lesson_task_id
+    }
+    students {
+        bigint id
+        character address
+        timestamp(6) created_at
+        date date_of_birth
+        character education
+        character gender
+        character organization
+        timestamp(6) updated_at
+        bigint user_id
+    }
+    sync_metadata {
+        character synckey
+        timestamp(6) lastsynctime
+    }
+    users {
+        bigint id
+        character auth_provider
+        timestamp(6) created_at
+        character email
+        boolean email_verified
+        character first_name
+        character full_name
+        boolean is_active
+        timestamp(6) last_login_timestamp
+        character last_name
+    }
+    role ||--o{ role_data : "role_id"
+    courses ||--o{ learning_path_course : "course_id"
+    students ||--o{ lesson_task_tickets : "student_id"
+    classes ||--o{ class_sessions : "class_id"
+    classes ||--o{ class_score_configs : "class_id"
+    users ||--o{ course_catalogs : "updated_id"
+    guardians ||--o{ student_guardians : "guardian_id"
+    users ||--o{ lesson_resources : "updated_id"
+    orders ||--o{ student_guardians : "order_id"
+    students ||--o{ student_tasks : "student_id"
+    users ||--o{ course_workflow_step : "action_by"
+    class_session_exams ||--o{ student_exams : "exam_id"
+    lecturers ||--o{ class_lecturers : "lecturer_id"
+    exam_session_type ||--o{ exam_session : "exam_session_type_id"
+    users ||--o{ course_types : "updated_id"
+    lesson_task_tickets ||--o{ lesson_task_ticket_attachments : "ticket_id"
+    users ||--o{ lesson_task_tickets : "created_by"
+    course_types ||--o{ courses : "course_type_id"
+    course_catalogs ||--o{ courses : "course_catalog_id"
+    users ||--o{ course_modules : "created_id"
+    exams ||--o{ exam_questions : "exam_id"
+    exams ||--o{ exam_random_difficulty_ratios : "exam_id"
+    users ||--o{ class_posts : "created_by"
+    students ||--o{ student_classes : "student_id"
+    files ||--o{ lecturer_contracts : "file_id"
+    courses ||--o{ course_combos : "course_id"
+    courses ||--o{ course_lecturers : "course_id"
+    students ||--o{ student_exams : "student_id"
+    courses ||--o{ course_recommendations : "recommended_course_id"
+    files ||--o{ lesson_resources : "file_id"
+    me_products ||--o{ courses : "me_product_id"
+    courses ||--o{ course_recommendations : "course_id"
+    students ||--o{ student_assignments : "student_id"
+    users ||--o{ learning_paths : "created_id"
+    class_posts ||--o{ class_post_attachments : "post_id"
+    learning_paths ||--o{ learning_path_course : "learning_path_id"
+    exams ||--o{ exam_random_question_types : "exam_id"
+    users ||--o{ courses : "created_id"
+    search_keywords ||--o{ course_search_keywords : "search_keyword_id"
+    lecturers ||--o{ session_incidents : "replacement_lecturer_id"
+    exam_question_snapshots ||--o{ exam_question_option_snapshots : "exam_question_snapshot_id"
+    class_sessions ||--o{ class_session_attendance : "class_session_id"
+    files ||--o{ lesson_task_message_attachments : "file_id"
+    courses ||--o{ classes : "course_id"
+    courses ||--o{ course_configs : "course_id"
+    question_types ||--o{ exam_question_snapshots : "question_type_id"
+    course_catalogs ||--o{ questions : "course_catalog_id"
+    course_properties ||--o{ course_property_selections : "course_property_id"
+    users ||--o{ course_types : "created_id"
+    users ||--o{ lesson_task_messages : "sender_id"
+    users ||--o{ course_workflow_reviewers : "reviewer_id"
+    class_posts ||--o{ class_post_comments : "post_id"
+    files ||--o{ class_post_attachments : "file_id"
+    orders ||--o{ order_items : "order_id"
+    lecturers ||--o{ lecturer_contracts : "lecturer_id"
+    course_catalogs ||--o{ course_catalogs : "parent_id"
+    exams ||--o{ exam_session : "exam_id"
+    classes ||--o{ class_schedules : "class_id"
+    class_sessions ||--o{ session_files : "session_id"
+    users ||--o{ courses : "updated_id"
+    courses ||--o{ course_property_selections : "course_id"
+    users ||--o{ students : "user_id"
+    courses ||--o{ course_search_keywords : "course_id"
+    lecturers ||--o{ classes : "main_lecturer_id"
+    question_types ||--o{ questions : "question_type_id"
+    exam_questions ||--o{ exam_question_snapshots : "exam_question_id"
+    lesson_tasks ||--o{ student_tasks : "lesson_task_id"
+    question_tags ||--o{ question_tag_bindings : "question_tag_id"
+    students ||--o{ student_guardians : "student_id"
+    classes ||--o{ class_lecturers : "class_id"
+    users ||--o{ lessons : "created_id"
+    lesson_task_messages ||--o{ lesson_task_message_attachments : "message_id"
+    users ||--o{ class_post_comments : "user_id"
+    course_properties ||--o{ course_property_options : "course_property_id"
+    classes ||--o{ student_classes : "class_id"
+    lessons ||--o{ lesson_resources : "lesson_id"
+    class_sessions ||--o{ class_session_assignments : "class_session_id"
+    files ||--o{ class_session_exams : "exam_file_id"
+    class_sessions ||--o{ lesson_tasks : "class_session_id"
+    files ||--o{ session_files : "file_id"
+    users ||--o{ lessons : "updated_id"
+    classes ||--o{ exam_session : "class_id"
+    students ||--o{ lesson_task_messages : "student_id"
+    lecturers ||--o{ course_lecturers : "lecturer_id"
+    users ||--o{ role_data : "user_id"
+    courses ||--o{ course_workflow_step : "course_id"
+    files ||--o{ class_session_assignments : "question_file_id"
+    users ||--o{ course_catalogs : "created_id"
+    files ||--o{ lesson_task_ticket_attachments : "file_id"
+    users ||--o{ course_modules : "updated_id"
+    class_session_assignments ||--o{ student_assignments : "assignment_id"
+    users ||--o{ lesson_task_tickets : "assigned_to"
+    class_sessions ||--o{ class_session_overrides : "session_id"
+    classes ||--o{ class_posts : "class_id"
+    courses ||--o{ course_workflow_reviewers : "course_id"
+    lecturers ||--o{ classes : "assistant_id"
+    files ||--o{ student_exams : "submission_file_id"
+    exams ||--o{ exam_random_tags : "exam_id"
+    courses ||--o{ course_combos : ""course combo_id""
+    course_property_options ||--o{ course_property_selections : "course_property_option_id"
+    users ||--o{ lecturers : "user_id"
+    files ||--o{ class_session_assignments : "answer_file_id"
+    question_tags ||--o{ exam_random_tags : "question_tag_id"
+    questions ||--o{ question_tag_bindings : "question_id"
+    files ||--o{ student_assignments : "submission_file_id"
+    question_types ||--o{ exam_random_question_types : "question_type_id"
+    users ||--o{ lesson_resources : "created_id"
+    lessons ||--o{ class_sessions : "lesson_id"
+    courses ||--o{ course_workflows : "course_id"
+    class_sessions ||--o{ class_session_exams : "session_id"
+    lesson_tasks ||--o{ lesson_task_messages : "lesson_task_id"
+    lesson_tasks ||--o{ lesson_task_tickets : "task_id"
+    course_modules ||--o{ lessons : "course_module_id"
+    questions ||--o{ exam_questions : "question_id"
+    questions ||--o{ question_options : "question_id"
+    lecturers ||--o{ session_incidents : "reported_by"
+    class_sessions ||--o{ session_incidents : "session_id"
+    courses ||--o{ course_modules : "course_id"
+    orders ||--o{ payment_schedules : "order_id"
+```
